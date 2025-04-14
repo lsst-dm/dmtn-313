@@ -21,3 +21,26 @@ orcid = "https://orcid.org/0009-0008-9216-7516"
 name = "Department of Astrophysical Sciences"
 internal_id = "Princeton-Astro"
 address = "Princeton University, Princeton, NJ 08544, USA"
+[[technote.authors]]
+name = {given = "Hsin-Fang", family = "Chiang"}
+internal_id = "chiangh"
+orcid = "https://orcid.org/0000-0002-1181-1621"
+[[technote.authors.affiliations]]
+name = "Vera C. Rubin Observatory Project Office"
+internal_id = "RubinObs"
+address = "950 N. Cherry Ave., Tucson, AZ 85719, USA"
+[[technote.authors]]
+name = {given = "Colin T.", family = "Slater"}
+internal_id = "slaterct"
+orcid = "https://orcid.org/0000-0002-0558-0521"
+[[technote.authors.affiliations]]
+name = "University of Washington"
+internal_id = "Washington"
+address = "Dept. of Astronomy, Box 351580, Seattle, WA 98195, USA"
+[[technote.authors]]
+name = {given = "James", family = "Chiang"}
+internal_id = "chiangj"
+[[technote.authors.affiliations]]
+name = "Kavli Institute for Particle Astrophysics and Cosmology"
+internal_id = "SLAC-Kavli"
+address = "SLAC National Accelerator Laboratory, 2575 Sand Hill Rd., Menlo Park, CA 94025, USA"
