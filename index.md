@@ -27,13 +27,13 @@ By LSSTCam-scale, we mean:
 
 This rehearsal was conducted entirely within DM at the **USDF**, with no summit component.
 The load was applied to many layers of infrastructure simultaneously and includes, but is not limited to:
-- **embargo rack**: disks and network  
+- **embargo rack**: storage and network
 - **/sdf/group (weka)**: shared software stack  
 - **batch nodes**: 72 Milanos (120 cores each)  
-- **Kubernetes** d-nodes  
-- **PostgreSQL**: for the Butler  
-- **Cassandra (APDB)**  
-- **Kafka**: for alert distribution  
+- **Kubernetes** Embargo nodes (d-nodes)
+- **PostgreSQL**: for the Butler registry
+- **Cassandra**: for APDB
+- **Kafka**: for nextVisit events and for alert distribution
 
 The capability to meet these challenges depends on the full **DM stack**.
 Representatives from campaign management, pipelines, middleware, and the data facility (S3DF) participated, monitored, and troubleshooted throughout OR5.
@@ -289,30 +289,34 @@ The batch processing system is fundamentally capable, but **scheduler behavior, 
 
 #### Data Configuration
 
-The prompt processing tests used replayed exposures from the collection:
+The prompt processing tests replayed the 800 exposures from the collection:
 
 - `embargo_or5/2.2i/raw/OR5/DDF/day2/DM-48585`
 
-We intended to use distinct original exposures each day but ultimately replayed the same 800-visit dataset each time. While this had no known impact on internal pipeline behavior, it was flagged by real alert brokers as problematic. In future tests, we should ensure **exposure uniqueness** to avoid confusing downstream consumers.
+We intended to use distinct original exposures each day, but pracitcally repeated some visits during OR5. While this had no known impact on internal pipeline behavior, it was later flagged by alert brokers as problematic. In OR5.2, we ensured **exposure uniqueness** via overwriting their exposure timestamps to avoid confusing downstream consumers.
 
 Replay was driven by a custom Python script that injected one exposure every **32 seconds**, approximating the LSSTCam design cadence (30-second exposures plus overhead).
 
-To support this:
+To support this, for OR5:
 
 - Each replayed exposure was assigned a **new, unique exposure ID**
-- The original `visitInfo` was preserved to ensure valid calibration associations
+- The original `visitInfo` was preserved to ensure valid calibration associations during OR5.
 - A new `day_obs` was assigned based on the replay time, resulting in some inconsistency between `exposure timespan` and `day_obs` metadata — this was noted but had no observed operational impact
+
+For OR5.2:
+- Instead of preserving the original `visitInfo`, we updated it using the replay time.
+- The mocked nextVisit events have consistent timestamps.
 
 The full **AP pipeline (ApPipe)** was run, using:
 
-- **Cassandra APDB** for association
+- **Cassandra APDB**
 - **Kafka** for alert distribution (alerts were published to the `alerts-simulated` topic)
 
 #### Infrastructure Configuration
 
 OR5 marked the first time prompt processing scaled to this level using production-adjacent infrastructure:
 
-- **Embargo Kubernetes nodes**:
+- **Embargo Kubernetes nodes** (March):
   - 28 nodes
   - 48 cores / 256 GB RAM / 550 GB ephemeral storage each
   - Dedicated to prompt processing during OR5, though this exclusivity will not persist in commissioning
@@ -321,7 +325,7 @@ OR5 marked the first time prompt processing scaled to this level using productio
   - Separate buckets provisioned for OR5
   - File notifications triggered auto-ingest and presence microservices, closely mimicking operational behavior
 
-The system exercised both supported backend platforms:
+The system exercised both supported backend platforms at OR5:
 
 - **Knative**
 - **KEDA**
@@ -394,7 +398,7 @@ Day 2 of prompt processing was more structured and targeted. A **new release (ru
 - **Middleware speed-up tests**:  
   Two proposed improvements to speed up dataset export were tested. **Neither provided sufficient performance gains**, confirming that the dataset export bottleneck remains unresolved.
 
-- **Knative scaling with 2 workers per pod**:  
+- **Knative worker cap**
   The team tested Knative's ability to exceed its known concurrency cap by assigning **2 workers per pod**.  
   Result: the platform **still capped at ~1,000 workers**, indicating a broader systemic limitation.
 
@@ -402,7 +406,7 @@ Day 2 of prompt processing was more structured and targeted. A **new release (ru
   By **disabling dataset export** from workers to the central Butler repository, the team was able to:
   - Confirm that **export was the primary bottleneck**
   - Observe that **pipeline execution and alert generation functioned smoothly**
-  - Identify **memory availability** as the only remaining scaling constraint (capped at ~1,500 workers with current resources)
+  - Identify **memory availability** as the only remaining scaling constraint (capped at ~1,500 workers with OR5 resources)
 
 - **Quick Stack workflow exercised**:  
   The team deployed a custom-built stack with ticket branches, bypassing the formal release process.  
