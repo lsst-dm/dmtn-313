@@ -1,51 +1,52 @@
 # Report from Operations Rehearsal 5
 
 ```{abstract}
-Report from Operations Rehearsal 5 as of March 11 2025. 
+Report from Operations Rehearsal 5 as of March 11 2025.
 
 There was another round of tests week of April 7th 20245, which will be incorporated soon
 ```
 
 ## Introduction
 
-The LSSTCam is nearly in place, and when it starts producing data, it won’t trickle — it’ll blast. The question we set out to answer during **Operations Rehearsal 5 (OR5)** was:
+The question we sought out to answer during **Operations Rehearsal 5 (OR5)** was:
 
 > **Can Rubin Data Management (DM) keep up with LSSTCam-scale data processing?**
 
 
-By LSSTCam-scale, we mean:
+where LSSTCam-scale mean:
 
 - **800 visits per night**, each visit composed of **189 detectors**;
 - Processing that includes both:
   - **DRP-style batch processing**, and
   - **Prompt Processing (AP)** at the US Data Facility (USDF).
 
+
 ### Goals of OR5
 
-- **Batch**: Demonstrate processing of 800 visits in 24 hours using the Nightly Validation pipeline (coadds, no DIA).
+The goals were to identify and resolve bottlenecks ahead of LSSTCam on-sky commissioning in the following payloads.
+
+- **Batch**: Demonstrate processing of 800 visits in 24 hours using the Nightly Validation pipeline (coadds, no DIA). This pipeline provides a shorter test of a subset of tasks included in the full DRP pipeline. Processing time needs to keep up with observing (i.e. one weeks worth of LSSTCam images should make it through a DRP in < one week)
 - **Prompt**: Demonstrate prompt processing at design cadence (~37 seconds per image) using replayed simulated images.
 
 This rehearsal was conducted entirely within DM at the **USDF**, with no summit component.
 The load was applied to many layers of infrastructure simultaneously and includes, but is not limited to:
+
 - **embargo rack**: storage and network
-- **/sdf/group (weka)**: shared software stack  
-- **batch nodes**: 72 Milanos (120 cores each)  
+- **/sdf/group (weka)**: shared software stack
+- **batch nodes**: 72 Milanos (120 cores each)
 - **Kubernetes** Embargo nodes (d-nodes)
 - **PostgreSQL**: for the Butler registry
 - **Cassandra**: for APDB
 - **Kafka**: for nextVisit events and for alert distribution
 
-The capability to meet these challenges depends on the full **DM stack**.
+The capability to meet these challenges depends on the full DM stack.
 Representatives from campaign management, pipelines, middleware, and the data facility (S3DF) participated, monitored, and troubleshooted throughout OR5.
 
 ### Experiment Setup
 
 We prioritized **successful execution** over strict experimental design.
 Fixes discovered on one day were immediately applied to subsequent tests.
-This approach enabled rapid progress, but it means:
-
-- Comparisons across days (e.g., **HTCondor vs PanDA**, **w_2025_08 vs w_2025_09**) are **not controlled experiments**.
-- The data is valuable for operational insight, but not suitable for rigorous benchmarking.
+This approach enabled rapid progress, but it means that comparisons across days (e.g., HTCondor vs PanDA, w_2025_08 vs w_2025_09) are **not controlled experiments**. The data is valuable for operational insight, but not suitable for rigorous benchmarking.
 
 To generate load, we copied **10 days of LSSTCam-imSim data** (DESC DC2 Run2.2i) into the embargo rack:
 
@@ -70,63 +71,71 @@ Discussion and real-time debugging were captured in the `#ops-rehearsals` Slack 
 
 We conducted three one-day batch processing tests during OR5:
 
-| Day | Date      |  WMS      | Pipeline     | Dataset | Pilot Team     |
-|-----|-----------|-----------|--------------|---------|----------------|
-| 1   | Feb 27    | HTCondor  | w_2025_08    | WFD     | Homer & JimC   |
-| 2   | March 4   | HTCondor  | w_2025_09    | DDF     | Homer & JimC   |
-| 3   | March 6   | PanDA     | w_2025_09    | WFD     | Yusra & JimC   |
+| Day | Date      |  WMS      | Pipeline     | Dataset |
+|-----|-----------|-----------|--------------|---------|
+| 1   | Feb 27    | HTCondor  | w_2025_08    | WFD     |
+| 2   | March 4   | HTCondor  | w_2025_09    | DDF     |
+| 3   | March 6   | PanDA     | w_2025_09    | WFD     |
 
 The original goal was to span a 2×2 test matrix:
+
 - Workflow management system: **HTCondor** vs **PanDA**
 - Dataset type: **Wide-Fast-Deep (WFD)** vs **Deep Drilling Field (DDF)**
 
-However, we prioritized **successful execution** over strict matrix coverage.
-That means not all combinations were tested exactly once, and some experimental conditions changed between runs.
+However, we prioritized **successful execution** over strict matrix coverage. Not all combinations were tested exactly once, and some experimental conditions changed between runs.
 
 
 ### Batch Test 1: WFD, `w_2025_08`, HTCondor
 
 **Configuration:**
 
+- **Date**: 2025-02-27
 - **Dataset**: `2.2i/raw/OR5/WFD/day1/DM-48585`
-- **Pipeline version**: `w_2025_08`  
+- **Pipeline version**: `w_2025_08`
 - **Workflow manager**: HTCondor
 - **submit_dir**: `/sdf/group/rubin/shared/campaigns/LSSTCam-imSim-OR5-htcondor/submit/LSSTCam-imSim/OR5/runs/nightlyValidation_day1/w_2025_08/DM-4917`
 
 
-We ran 800 visits of WFD-mode data through the **Nightly Validation** pipeline using **HTCondor** and **w_2025_08**. The software stack was mounted via **CVMFS**, and Butler's caching behavior was customized to reduce pressure on the embargo rack:
+We ran 800 visits of WFD-mode data through the **Nightly Validation** pipeline using **HTCondor** and `w_2025_08`.
+The software stack was mounted via **CVMFS**, and Butler's caching behavior was customized to reduce pressure on the embargo rack:
+
 - Normally,we configure the Butler to use a 500-dataset cap for local cache.
 - We increased this to **1 TB**, allowing local re-use of calibration data across jobs.
 
 This tuning was motivated by known I/O bottlenecks during **instrument signature removal (ISR)**. ISR requires multiple calibration frames per detector (bias, dark, flat, etc.), resulting in substantial read load from the embargo rack.
 
-To mitigate this, we experimented with **detector-level clustering** via BPS. This strategy, which groups quanta by detector ID, sends each detector’s jobs to a single node, thus reducing redundant reads.
-However, as of February 29, naively clustering by detector caps the number of parallel jobs at **189** — far below the 8,000+ cores available. To scale up:
+To mitigate this, we experimented with **detector-level clustering** via BPS.
+This strategy, which groups quanta by detector ID, sends each detector’s jobs to a single node, thus reducing redundant reads.
+However, as of February 27, naively clustering by detector caps the number of parallel jobs at **189** — far below the 8,000+ cores available. To scale up:
 
 - The 800 visits were divided into **53 groups**, each covering ~15 visits.
 - Each group was submitted as a separate BPS submission.
 - Within each group, clustering by detector was applied.
 
-This approach maintained the locality benefits while increasing total concurrency via parallel submissions.
+This approach maintained the locality benefits while increasing total concurrency via parallel submissions. The need for manually submitting mulitple groups has since been resolved on [DM-49240](https://rubinobs.atlassian.net/browse/DM-49240).
+
 
 #### Observations
 
 
 
-![Figure 11](figures/fig11.png)
+![Figure 11](figures/fig11.png "Caption")
+*Allocated cores for batch test 1 show steps 1, 2 and 3 of the nighly validation pipeline payload.*
 
-Figure 11 shows the progression through the pipeline stages, as seen in CPU usage:
+The above figure shows the progression through the pipeline stages, as seen in allocated CPUs:
 
-- **Step 1**: Near-saturation of available cores. ISR and early steps were well parallelized, and cluster utilization approached the ~8,000 core ceiling. 
+- **Step 1**: Near-saturation of available cores. ISR and early steps were well parallelized, and cluster utilization approached the ~8,000 core ceiling.
 - **Step 2**: Underutilization (~800 concurrent jobs) due to `finalizeCharacterization` being parallelized by visit instead of detector. This was addressed in [DM-48932](https://rubinobs.atlassian.net/browse/DM-48932).
-- **Step 3**: Significant idle time due to short-duration `makeDirectWarp` and `makePsfMatchedWarp` tasks being scheduled independently. These were later re-clustered, as described in [DM-49246](https://rubinobs.atlassian.net/browse/DM-49246).
-- **Plateau phase**: Slurm failed to preempt low-priority jobs, limiting throughput. Manual intervention was required (see [DM-49356](https://rubinobs.atlassian.net/browse/DM-49356)).
-- **Final drop**: A complete shutdown due to the HTCondor database reaching its 25 GB partition limit. This was fixed the following day by moving it to a larger volume ([DM-49296](https://rubinobs.atlassian.net/browse/DM-49296)).
+- **Step 3**: Underutilization had multiple causes:
+  - **4000 core plateau**: Idle time due to short-duration `makeDirectWarp` and `makePsfMatchedWarp` tasks being scheduled independently. These were later clustered in [DM-49246](https://rubinobs.atlassian.net/browse/DM-49246).
+  - **6500 core plataeu**: Slurm failed to preempt low-priority jobs, limiting throughput. Manual intervention was required.
+  - **Final drop at 23:00**: Jobs came to a halt because the HTCondor database filled its 25 GB partition limit. This was fixed the following day by moving it to a larger volume ([DM-49296](https://rubinobs.atlassian.net/browse/DM-49296)).
 
 **I/O Behavior**:
 
-![Figure 9](figures/fig09.png)  
+![Figure 9](figures/fig09.png)
 ![Figure 10](figures/fig10.png)
+*Read and write volume from/to the embargo rack during batch test 1*
 
 - Read throughput was high but stable. The per-detector clustering approach (53 groups × ~15 visits) successfully filled the cluster while improving cache locality, minimizing embargo rack reads during ISR.
 - A notable spike occurred during `ConsolidateVisitSummaryTask`, with read rates exceeding previous observations. This prompted an investigation into more efficient metadata access, tracked in [DM-49314](https://rubinobs.atlassian.net/browse/DM-49314).
@@ -134,27 +143,25 @@ Figure 11 shows the progression through the pipeline stages, as seen in CPU usag
 
 **Additional Observations**: During the test, **AuxTel was observing**, and calibration frames were being transferred and ingested to the embargo rack.
 In the past, this dual load caused ingest problems—but in this test, **AuxTel ingest operated normally**.
-The successful ingest alongside active science processing suggests that the embargo rack and I/O infrastructure can now sustain concurrent operational loads, with the caveat that LATISS data is only one detector and this may not hold for LSSTCam. 
+The successful ingest alongside active science processing suggests that the embargo rack and I/O infrastructure can now sustain concurrent operational loads, with the caveat that LATISS data is only one detector and this may not hold for LSSTCam.
 
 
-This test demonstrated that:
-
-- Detector-level clustering is an effective strategy for ISR-heavy stages.
-- Several bottlenecks (graph generation, scheduling, step parallelism) have clear mitigation paths.
+In summary, this test demonstrated that detector-level clustering is an effective strategy for ISR-heavy stages. Several bottlenecks (graph generation, slurm scheduling, task parallelism) were found and have clear mitigation paths.
 
 ### Batch Test 2: HTCondor, DDF
 
 **Configuration:**
 
+- **Date**: 2025-03-04
 - **Dataset**: `2.2i/raw/OR5/DDF/day1/DM-48585`
-- **submit_dir**: `/sdf/group/rubin/shared/campaigns/LSSTCam-imSim-OR5-htcondor-newday/submit/LSSTCam-imSim/OR5/runs/nightlyValidation2_day1/w_2025_09/DM-49179`  
-- **Pipeline version**: `w_2025_09`  
-- **Workflow manager**: HTCondor  
-- **Submission details**: 
-  - Allocated 8,000 cores at the start  
-  - `--auto` resource allocation from that point onward  
-  - BPS submissions: 53 groups, 20 seconds between submissions (down from 50s on Day 1)  
-  - Step 3 split into 20-patch groups to avoid quantum graph (QG) memory errors  
+- **submit_dir**: `/sdf/group/rubin/shared/campaigns/LSSTCam-imSim-OR5-htcondor-newday/submit/LSSTCam-imSim/OR5/runs/nightlyValidation2_day1/w_2025_09/DM-49179`
+- **Pipeline version**: `w_2025_09`
+- **Workflow manager**: HTCondor
+- **Submission details**:
+  - Allocated 8,000 cores at the start
+  - `--auto` resource allocation from that point onward
+  - BPS submissions: 53 groups, 20 seconds between submissions (down from 50s on Day 1)
+  - Step 3 split into 20-patch groups to avoid quantum graph (QG) memory errors
 
 
 
@@ -162,53 +169,59 @@ This test demonstrated that:
 #### Observations
 
 ![Figure 15](figures/fig15.png)
+*Allocated cores for batch test 2 show steps 1, 2 and 3 of the nighly validation pipeline payload. The increase in cores between 12:00 and 14:00 correspond to jobs submitted outside of OR5*
 
 - **Step 1 took significantly longer** than Day 1, despite reduced submission spacing.
-  - This was partly due to pipeline errors triggered by **insufficient refcat coverage** in the DDF region.
-  - The failures led to **retries**, reducing concurrency and extending runtime.
-- As Step 1 was wrapping up, **unexpected load appeared** on the cluster. 
+  - This was partly due to pipeline errors triggered by **insufficient refcat coverage** in the DDF region. The failures led to **retries** extending runtime.
+- As Step 1 was wrapping up, an **unexpected load appeared** on the cluster.
   - It was traced to an unmonitored **PanDA dev instance** that began launching jobs mid-test.
   - USDF staff attempted to cancel them using `scancel`, but PanDA’s persistent retry mechanism continually respawned jobs.
-  - Ultimately, direct cancellation by the PanDA devs who launched the jobs was required to stop the runaway job spawning. 
-- Node `sdfmilan093` was manually drained due to persistent Weka-related issues
+  - Ultimately, direct cancellation by the PanDA devs who launched the jobs was required to stop the runaway job spawning.
+- Node `sdfmilan124` only had 40GB of `/lscratch` and was manually drained.
+
 
 **Takeaways**
 
-- **Step 1 runtime doubled** due to a combination of pipeline retries and reduced concurrency.
-- The **PanDA runaway job scenario** revealed a gap in local operational control:
-  - USDF staff lacked a reliable way to **terminate PanDA job submission** from external controllers.
-  - Highlighted the need for stronger coordination and job kill capabilities for future rehearsals.
-- Monitoring data confirmed **fewer concurrent jobs** than Day 1, contributing to slower throughput. The **PanDA runaway job scenario** revealed a gap in local operational control
-- QG out of memory failures mitigated on [DM-49296](https://rubinobs.atlassian.net/browse/DM-49296)
+- **Step 1 runtime doubled** due to a combination of pipeline retries and reduced concurrency. Monitoring data confirmed **fewer concurrent jobs** than Day 1, contributing to slower throughput.
+- The **PanDA runaway job scenario** revealed a gap in local operational control. USDF staff lacked a reliable way to **terminate PanDA job submission** from external controllers which revealed a gap in local operational control.
+- The out of memory failures in quantum-graph generation that required multiple submissions of group3 has been mitigated on [DM-49296](https://rubinobs.atlassian.net/browse/DM-49296).
+
 
 ### Batch Test 3: PanDA, WFD
 
 **Configuration:**
 
+- **date**: 2025-03-06
 - **Dataset**: `2.2i/raw/OR5/DDF/day1/DM-48585`
-- **submit_dir**: `/sdf/group/rubin/shared/campaigns/LSSTCam-imSim-OR5-PanDA/DDF_day1` 
-- **Pipeline version**: `w_2025_09`  
-- **Workflow manager**: PanDA   
+- **submit_dir**: `/sdf/group/rubin/shared/campaigns/LSSTCam-imSim-OR5-PanDA/DDF_day1`
+- **Pipeline version**: `w_2025_09`
+- **Workflow manager**: PanDA
 - **submission details**:
-  - Step 1: 20s between BPS submissions  
+  - Step 1: 20s between BPS submissions
 
 
 #### Observations
 
 ![Figure 22](figures/fig22.png)
+*Allocated cores for batch test 3. InfluxDB issues led to gaps in monitoring data, but three distinct processing phases are still visible.*
 
-- This run included the addition of `pipetask report`, which had been missing from the previous two tests. It took much too long to block the submission of the next processing stage. 
-- **InfluxDB issues** led to **gaps in monitoring data**, but three distinct processing phases are still visible.
+- This run included the addition of `pipetask report` to `finalJob`. Runtime was over an hour due to resource contention. At these scales, we decided that it takes too long to block the submission of the next processing stage. In scenarios where the output of `pipetask report` is not necessary before submitting to next stage, it should be run in parallel with submitting the next job.
 - All steps took **~3× longer** than in the earlier HTCondor runs, a discrepancy visible in both **wall time** and **CPU time**.
 - **One Step 3 group failed to submit** (1 out of 10), which underscores the need for consistent campaign maangement tooling.
 
 ![Figure 23](figures/fig23.png)
+*CPU time (left) and wall time (right) for `CalibrationImageTask` for the first three batch tests*
 
 - **CPU runtime was significantly inflated** on Day 3 compared to the same tasks in Batch Test 1.
 - **Actual core usage** was also low relative to available capacity, suggesting inefficiencies in how PanDA-managed jobs were scheduled and executed.
 
-![Figure 24](figures/fig24.png)  
+![Figure 24](figures/fig24.png)
+*pipetask processes running concurrently as a function of time from Task Metadata (blue). Number of cores allocated (orange)*
+
+
 ![Figure 25](figures/fig25.png)
+*Traffic in and out of the embargo rack for Day 2. Some of the drops in core usage are correlated with embargo rack traffic"
+
 
 - These figures compare the number of concurrent `pipetask` processes (from task metadata) with available Slurm cores.
 - Across all NV runs, efficiency was well below 100%. On Day 3, the gap between allocated and actively used cores was especially stark. Some drops are temporally correlated with network traffic spikes to and from the embargo rack, suggesting shared resource contention.
@@ -216,70 +229,67 @@ This test demonstrated that:
 
 #### Performance Investigation
 
-An **investigation* is ongoing, but several key factors have been identified:
+An investigation is ongoing, but several key factors have been identified:
 
-- **Monitoring limitations**: It's currently difficult to observe actual core utilization (vs allocations) in real time. Improving this has been a long-standing need. OpenSearch is partially in place, but full integration is pending.
-- **Node packing effects**: Tests showed that tightly packing nodes—up to the full 120-core capacity—resulted in the same ~3× slowdown, even with HTCondor.  
+- **Monitoring limitations**: It's currently difficult to observe actual core utilization (vs allocations) in real time. Improving this has been a long-standing need. OpenSearch is partially in place, but full integration is pending. As of April this monitoring is in place for HTCondor workflows, but not PanDa workflows.
+- **Node packing effects**: Tests showed that tightly packing nodes—up to the full 120-core capacity—resulted in the same ~3× slowdown, even with HTCondor.
 - **I/O contention**: `pipetask report` jobs failed to finish, potentially due to I/O pressure on the scratch area.
 
-Emerging evidence suggests the PanDA slowdown may stem from unintended **CPU pinning and L3 cache contention**:
+Our current interpretation of the relative slowness during the PanDA-based batch test 3, points to two dominant factors: (1) caching behavior that funneled all intermediate outputs into a single monolithic directory and (2) increased node packing under PanDA, which scheduled more jobs per node on average compared to HTCondor.
+Earlier hypotheses that CPU pinning and L3 cache contention were causing the longer runtimes.
+Subsequent testing suggests those effects were less important, especially in fully packed configurations where such contention is unavoidable.
 
-- **PanDA jobs are pinned** to specific cores (as if `srun --cpu-bind=cores` were used), which clusters them onto single NUMA modules.
-- **AMD Milan processors** have 8 cores per NUMA module, which aligns poorly with PanDA's 8-jobs-per-pilot submission model.
-- When pinned, **multiple memory-intensive tasks** (e.g., `calibrateImage`, `finalizeCharacterization`) compete for the same **L3 cache**, causing significant slowdowns due to cache misses.
 
-Without CPU pinning, the system scheduler could redistribute load across NUMA boundaries, reducing contention.
+#### Batch Takeaways
 
-![Figure 30](figures/fig30.png)
-
-- This figure shows that forcing jobs to fully occupy a node with CPU pinning results in **2–3× longer runtimes**, consistent with the behavior observed during Batch Test 3.
-
----
-
-#### Takeaways
-
-- **PanDA performance was significantly worse** than HTCondor under OR5 test conditions, but may be recoverable with tuning.
-- **Avoiding CPU pinning**, and potentially under-packing nodes, could substantially improve throughput.
 - **Better visibility into actual resource usage** (vs allocations) is urgently needed.
 - The ability to **monitor and control core-level behavior** is essential for tuning and diagnosing end-to-end system performance.
 
 This test illustrates why integrated, realistic rehearsals are essential: they reveal subtle yet impactful performance pathologies that wouldn't emerge from unit or subsystem testing alone.
 
 
-
 ### Batch Test Takeaways as of March
 
-The batch tests in OR5 demonstrated that Rubin’s data processing system can approach LSSTCam-scale throughput, but several bottlenecks and unresolved issues must be addressed before on-sky operations:
+The batch tests in OR5 demonstrated that Rubin’s data processing system can approach LSSTCam-scale throughput. Several bottlenecks were identified and resolved. Several unresolved issues must be addressed before on-sky operations:
 
-- **Quantum Graph (QG) Generation Gaps**  
-  Gaps between pipeline stages due to slow or memory-intensive QG generation limited end-to-end throughput. Improvements in QG efficiency (e.g., step co-launching, graph splitting strategies) are essential.  
+**Resolved**
+
+- **Quantum Graph (QG) Generation Gaps**
+  Gaps between pipeline stages due to slow or memory-intensive QG generation limited end-to-end throughput. Improvements in QG efficiency (e.g., step co-launching, graph splitting strategies) are essential.
   _See: [DM-49296](https://rubinobs.atlassian.net/browse/DM-49296)_
 
-- **Step Parallelism Constraints**  
-  Some tasks (e.g., `finalizeCharacterization`) were originally parallelized by visit, limiting concurrency. Refactoring to support per-detector execution restored full cluster utilization.  
+- **Step Parallelism Constraints**
+  Some tasks (e.g., `finalizeCharacterization`) were originally parallelized by visit, limiting concurrency. Refactoring to support per-detector execution restored full cluster utilization.
   _See: [DM-48932](https://rubinobs.atlassian.net/browse/DM-48932)_
 
-- **Short-Running Tasks and Scheduling Inefficiency**  
-  Unclustered warp tasks were too lightweight to schedule efficiently. Re-grouping them resolved this for HTCondor; similar clustering logic is needed in PanDA.  
+- **Short-Running Tasks and Scheduling Inefficiency**
+  Unclustered warp tasks were too lightweight to schedule efficiently; Clustering them resolved this.
   _See: [DM-49246](https://rubinobs.atlassian.net/browse/DM-49246)_
 
-- **Preemptable Job Handling**  
-  Slurm failed to cancel preemptable jobs in real time, artificially capping core availability. This required manual intervention and highlights the need for improved job control logic.  
-  _See: [DM-49356](https://rubinobs.atlassian.net/browse/DM-49356)_
+- **Non-optimal glidein size**
+  HTCondor jobs run on slurm glideins requested by `allocateNodes.py`. Because 120 cores are available per node, the default configuration of 16-core glideins left `120 % 16 = 8` cores unavailble on each node. The simple resolution changed the default to 15 cores:
+_See: [DM-49246](https://rubinobs.atlassian.net/browse/DM-49356)_
 
-- **Monitoring Gaps**  
-  We lack reliable, real-time visibility into actual core usage (vs allocations), making it difficult to diagnose underutilization or oversubscription. Scaling OpenSearch and improving job-level observability is a high priority.
-
-- **Infrastructure Configuration Limits**  
+- **Infrastructure Configuration Limits**
   Failures due to undersized HTCondor DB partitions and pipetask scratch I/O contention were resolved during the test but underscore the need for hardened configuration across all components.
 
-- **PanDA Runtime Slowdown**  
-  Jobs under PanDA ran 2–3× slower than equivalent HTCondor jobs. Emerging evidence points to CPU pinning and L3 cache contention due to poor NUMA alignment. These effects must be mitigated before full PanDA deployment.  
-  _See: [Figure 30](figures/fig30.png)_
+- **Runtime Slowdown**
+  Jobs under PanDA ran 2–3× slower than equivalent HTCondor jobs. Subsequent tests point to butler cache contention resulting from more tightly-packed nodes, which can be mitigated by careful specification of cache subdirectories.
 
 
-**In summary:**  
-The batch processing system is fundamentally capable, but **scheduler behavior, task configuration, infrastructure tuning, and monitoring gaps** must be addressed to ensure we can sustain DRP throughput at LSSTCam scale once real data starts flowing.
+**Unresolved as of April 19**
+
+
+- **Preemptable Job Handling**
+  Slurm failed to cancel preemptable jobs in real time, artificially capping core availability. This required manual intervention and highlights the need for improved job control logic.
+  _See: [DM-49356](https://rubinobs.atlassian.net/browse/DM-49356)_
+
+- **Monitoring Gaps**
+  We lack reliable, real-time visibility into actual core usage (vs allocations), making it difficult to diagnose underutilization or oversubscription. OpenSearch and improving job-level observability is a high priority. As of early April, this capability has been available for HTCondor workflows, but is still needed for PanDA workflows.
+
+
+**In summary:**
+The batch processing system is fundamentally capable, but **scheduler behavior, task configuration, infrastructure tuning, node reliability, and monitoring gaps** must be addressed to ensure we can sustain DRP throughput at LSSTCam scale.
 
 
 
@@ -455,9 +465,8 @@ In summary, prompt processing pipelines performed well when isolated from export
 
 ## Conclusion
 
-Operations Rehearsal 5 (OR5) was a clear demonstration of the iterative nature of scaling Rubin’s data processing systems: **find the bottleneck, fix the bottleneck, and test again to find the next one**.
-
-We’re now entering the **analysis phase** of OR5 — reviewing the data, diagnosing the issues we encountered, and implementing and validating solutions. This process surfaced **unexpected bottlenecks** and we are learning where the system struggles under LSSTCam-scale loads.
+Operations Rehearsal 5 (OR5) was a clear demonstration of the iterative nature of scaling Rubin’s data processing systems: find the bottleneck, fix the bottleneck, and test again to find the next one.
+This process surfaced **unexpected bottlenecks** and we are learning where the system struggles under LSSTCam-scale loads.
 
 
 Many of the bottlenecks we discovered in both **Batch** and **Prompt Processing** would **not have been identified at smaller scales**.
@@ -478,6 +487,6 @@ This rehearsal helped de-risk many failure modes before we’re under the pressu
 The more we solve now, the fewer surprises we’ll face during on-sky chaos — and the faster we’ll converge on a well-running observatory.
 
 
-**Thank you to everyone who had their eyes on the processing during OR5.** 
+**Thank you to everyone who had their eyes on the processing during OR5.**
 
 
