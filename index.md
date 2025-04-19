@@ -354,10 +354,10 @@ Each day replayed 400 visits using each platform, for a total of **800 visits pe
 
 ### Prompt Test 1
 
-**Date:** March 3, 2025  
-**Stack version:** Prompt Service 5.1.1 (`d_2025_02_17`)  
-**Pipeline version:** `w_2025_09`  
-**Platforms tested:** Knative → KEDA  
+**Date:** March 3, 2025
+**Stack version:** Prompt Service 5.1.1 (`d_2025_02_17`)
+**Pipeline version:** `w_2025_09`
+**Platforms tested:** Knative → KEDA
 **Visits replayed per platform:** 400 (total 800)
 
 
@@ -393,10 +393,10 @@ This test highlighted the importance of **end-to-end orchestration robustness**,
 
 ### Prompt Test 2
 
-**Date:** March 5, 2025  
-**Stack version:** Prompt Service 6.0.0 (`d_2025_03_01`)  
-**Pipeline version:** `w_2025_09`  
-**Platforms tested:** KEDA → Knative  
+**Date:** March 5, 2025
+**Stack version:** Prompt Service 6.0.0 (`d_2025_03_01`)
+**Pipeline version:** `w_2025_09`
+**Platforms tested:** KEDA → Knative
 **Visits replayed per platform:** 400 (total 800)
 
 
@@ -405,21 +405,21 @@ Day 2 of prompt processing was more structured and targeted. A **new release (ru
 
 #### Observations
 
-- **Middleware speed-up tests**:  
+- **Middleware speed-up tests**:
   Two proposed improvements to speed up dataset export were tested. **Neither provided sufficient performance gains**, confirming that the dataset export bottleneck remains unresolved.
 
 - **Knative worker cap**
-  The team tested Knative's ability to exceed its known concurrency cap by assigning **2 workers per pod**.  
+  The team tested Knative's ability to exceed its known concurrency cap by assigning **2 workers per pod**.
   Result: the platform **still capped at ~1,000 workers**, indicating a broader systemic limitation.
 
-- **"No export" control test**:  
+- **"No export" control test**:
   By **disabling dataset export** from workers to the central Butler repository, the team was able to:
   - Confirm that **export was the primary bottleneck**
   - Observe that **pipeline execution and alert generation functioned smoothly**
   - Identify **memory availability** as the only remaining scaling constraint (capped at ~1,500 workers with OR5 resources)
 
-- **Quick Stack workflow exercised**:  
-  The team deployed a custom-built stack with ticket branches, bypassing the formal release process.  
+- **Quick Stack workflow exercised**:
+  The team deployed a custom-built stack with ticket branches, bypassing the formal release process.
   This “quick stack” path worked well and is expected to be critical for commissioning scenarios requiring rapid patch testing. A few integration issues were identified and documented.
 
 
